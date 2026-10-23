@@ -112,31 +112,119 @@ class Store extends ChangeNotifier {
 final store = Store();
 
 // ───────────────────────── UI ─────────────────────────
+const grad = LinearGradient(colors: [Color(0xFFFF8A3D), Color(0xFFFF4F6D)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+const orange = Color(0xFFFF6A3D);
+const bg = Color(0xFFF6F6F9);
+const tint = Color(0xFFFFF1EA);
+const catEmoji = {'All': '🛒', 'Fruits': '🍎', 'Dairy': '🥛', 'Snacks': '🍪', 'Drinks': '🥤'};
+
+BoxDecoration cardBox([double r = 16]) => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(r),
+    boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 4))]);
+
+InputDecoration fieldDeco(String hint, IconData icon, {Color fill = bg}) => InputDecoration(
+    hintText: hint,
+    prefixIcon: Icon(icon, color: orange),
+    filled: true,
+    fillColor: fill,
+    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none));
+
+void go(BuildContext c, Widget w) => Navigator.push(c, MaterialPageRoute(builder: (_) => w));
+
+Widget billRow(String a, String b, {bool bold = false, Color? color}) {
+  final s = TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w500, fontSize: bold ? 17 : 14, color: color);
+  return Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(a, style: s), Text(b, style: s)]));
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await store.load();
   runApp(MaterialApp(
     title: 'Instamart Mini',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.deepOrange),
-    home: const HomePage(),
+    theme: ThemeData(useMaterial3: true, colorSchemeSeed: orange, scaffoldBackgroundColor: bg),
+    // On a wide screen (Chrome / desktop) show the app inside a phone-shaped frame.
+    builder: (context, child) => Container(
+      color: const Color(0xFF16161A),
+      alignment: Alignment.center,
+      child: LayoutBuilder(builder: (_, c) {
+        if (c.maxWidth < 600) return child!;
+        final h = c.maxHeight - 32;
+        return Container(
+          width: 390,
+          height: h < 844 ? h : 844,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(40), border: Border.all(color: Colors.black, width: 9)),
+          child: child,
+        );
+      }),
+    ),
+    home: const LoginPage(),
   ));
 }
 
-class QtyControl extends StatelessWidget {
-  final Product p;
-  const QtyControl(this.p, {super.key});
+class GradButton extends StatelessWidget {
+  final String text;
+  final VoidCallback? onTap;
+  const GradButton(this.text, this.onTap, {super.key});
   @override
-  Widget build(BuildContext context) {
-    final n = store.cart[p.id] ?? 0;
-    if (p.stock == 0) return const OutlinedButton(onPressed: null, child: Text('Out of stock'));
-    if (n == 0) return FilledButton(onPressed: () => store.change(p, 1), child: const Text('ADD'));
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      IconButton(icon: const Icon(Icons.remove), onPressed: () => store.change(p, -1)),
-      Text('$n', style: const TextStyle(fontWeight: FontWeight.bold)),
-      IconButton(icon: const Icon(Icons.add), onPressed: n < p.stock ? () => store.change(p, 1) : null),
-    ]);
-  }
+  Widget build(BuildContext context) => Opacity(
+        opacity: onTap == null ? .45 : 1,
+        child: Material(
+          color: Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+                gradient: grad,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [BoxShadow(color: Color(0x59FF6A3D), blurRadius: 14, offset: Offset(0, 6))]),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onTap,
+              child: Container(
+                  height: 54,
+                  alignment: Alignment.center,
+                  child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700))),
+            ),
+          ),
+        ),
+      );
+}
+
+class LoginPage extends StatelessWidget {
+  const LoginPage({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(gradient: grad),
+          child: Column(children: [
+            const Expanded(
+              child: Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('⚡', style: TextStyle(fontSize: 56)),
+                  Text('Instamart Mini', style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800)),
+                  Text('Groceries in 10 minutes', style: TextStyle(color: Colors.white70)),
+                ]),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Sign In', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
+                const Text('Welcome back! Ready to shop?', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 20),
+                TextField(decoration: fieldDeco('Email address', Icons.mail_outline)),
+                const SizedBox(height: 12),
+                TextField(obscureText: true, decoration: fieldDeco('Password', Icons.lock_outline)),
+                const SizedBox(height: 20),
+                GradButton('Sign In  →', () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()))),
+              ]),
+            ),
+          ]),
+        ),
+      );
 }
 
 class HomePage extends StatelessWidget {
@@ -147,71 +235,141 @@ class HomePage extends StatelessWidget {
         builder: (context, _) {
           final ps = store.visible;
           return Scaffold(
-            appBar: AppBar(title: const Text('Instamart Mini'), actions: [
-              if (store.order != null)
-                TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TrackPage())),
-                    child: const Text('Track order')),
-              IconButton(
-                icon: Badge(
-                    isLabelVisible: store.cartCount > 0,
-                    label: Text('${store.cartCount}'),
-                    child: const Icon(Icons.shopping_cart)),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartPage())),
-              ),
-            ]),
-            body: Column(children: [
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextField(
-                  onChanged: store.setQuery,
-                  decoration: const InputDecoration(
-                      hintText: 'Search groceries', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-                ),
-              ),
-              SizedBox(
-                height: 48,
-                child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 8), children: [
-                  for (final c in categories)
+            body: Stack(children: [
+              Column(children: [
+                Container(
+                  padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 8, 16),
+                  decoration: const BoxDecoration(gradient: grad, borderRadius: BorderRadius.vertical(bottom: Radius.circular(28))),
+                  child: Column(children: [
+                    Row(children: [
+                      const Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Delivery in 10 minutes ⚡', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                          Text('Deliver to Home', style: TextStyle(color: Colors.white70)),
+                        ]),
+                      ),
+                      if (store.order != null)
+                        IconButton(icon: const Icon(Icons.local_shipping_outlined, color: Colors.white), onPressed: () => go(context, const TrackPage())),
+                      IconButton(
+                        icon: Badge(
+                            isLabelVisible: store.cartCount > 0,
+                            label: Text('${store.cartCount}'),
+                            child: const Icon(Icons.shopping_bag_outlined, color: Colors.white)),
+                        onPressed: () => go(context, const CartPage()),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(label: Text(c), selected: store.cat == c, onSelected: (_) => store.setCat(c)),
+                      child: TextField(onChanged: store.setQuery, decoration: fieldDeco('Search "milk"', Icons.search, fill: Colors.white)),
                     ),
-                ]),
-              ),
-              Expanded(
-                child: ps.isEmpty
-                    ? const Center(child: Text('No products found'))
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(8),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8, mainAxisExtent: 200),
-                        itemCount: ps.length,
-                        itemBuilder: (_, i) => ProductCard(ps[i]),
+                  ]),
+                ),
+                SizedBox(
+                  height: 60,
+                  child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), children: [
+                    for (final c in categories)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text('${catEmoji[c]} $c'),
+                          selected: store.cat == c,
+                          showCheckmark: false,
+                          selectedColor: orange,
+                          backgroundColor: Colors.white,
+                          side: BorderSide.none,
+                          labelStyle: TextStyle(fontWeight: FontWeight.w600, color: store.cat == c ? Colors.white : Colors.black87),
+                          onSelected: (_) => store.setCat(c),
+                        ),
                       ),
-              ),
+                  ]),
+                ),
+                Expanded(
+                  child: ps.isEmpty
+                      ? const Center(child: Text('No products found'))
+                      : GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(14, 4, 14, 90),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, mainAxisExtent: 215),
+                          itemCount: ps.length,
+                          itemBuilder: (_, i) => ProductCard(ps[i]),
+                        ),
+                ),
+              ]),
+              if (store.cartCount > 0)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  child: GradButton('${store.cartCount} items · ₹${store.cartTotal.toInt()}      View cart  →', () => go(context, const CartPage())),
+                ),
             ]),
           );
         },
       );
 }
 
+class QtyControl extends StatelessWidget {
+  final Product p;
+  const QtyControl(this.p, {super.key});
+  @override
+  Widget build(BuildContext context) {
+    final n = store.cart[p.id] ?? 0;
+    if (p.stock == 0) return const Text('Out of stock', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600));
+    if (n == 0) {
+      return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+            foregroundColor: orange,
+            side: const BorderSide(color: orange),
+            minimumSize: const Size(60, 34),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+        onPressed: () => store.change(p, 1),
+        child: const Text('ADD', style: TextStyle(fontWeight: FontWeight.w800)),
+      );
+    }
+    Widget btn(IconData i, VoidCallback? f) =>
+        InkWell(onTap: f, child: Padding(padding: const EdgeInsets.all(7), child: Icon(i, size: 18, color: f == null ? Colors.white54 : Colors.white)));
+    return Container(
+      decoration: BoxDecoration(color: orange, borderRadius: BorderRadius.circular(10)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        btn(Icons.remove, () => store.change(p, -1)),
+        Text('$n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        btn(Icons.add, n < p.stock ? () => store.change(p, 1) : null),
+      ]),
+    );
+  }
+}
+
 class ProductCard extends StatelessWidget {
   final Product p;
   const ProductCard(this.p, {super.key});
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text(p.emoji, style: const TextStyle(fontSize: 44)),
-            Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text('₹${p.price.toInt()}'),
-            if (p.stock > 0 && p.stock <= 5)
-              Text('Only ${p.stock} left', style: const TextStyle(color: Colors.deepOrange, fontSize: 12)),
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: cardBox(20),
+        child: Column(children: [
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(14)),
+              child: Opacity(opacity: p.stock == 0 ? .35 : 1, child: Text(p.emoji, style: const TextStyle(fontSize: 48))),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+              alignment: Alignment.centerLeft,
+              child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+          const SizedBox(height: 4),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('₹${p.price.toInt()}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              if (p.stock > 0 && p.stock <= 5) Text('Only ${p.stock} left', style: const TextStyle(color: Colors.red, fontSize: 11)),
+            ]),
             QtyControl(p),
           ]),
-        ),
+        ]),
       );
 }
 
@@ -230,54 +388,74 @@ class _CartPageState extends State<CartPage> {
         listenable: store,
         builder: (context, _) {
           final lines = store.cart.keys.map(store.byId).toList();
+          final total = '₹${store.cartTotal.toInt()}';
           return Scaffold(
-            appBar: AppBar(title: const Text('Cart')),
+            appBar: AppBar(
+                title: const Text('Your cart', style: TextStyle(fontWeight: FontWeight.w700)),
+                backgroundColor: bg,
+                surfaceTintColor: Colors.transparent),
             body: lines.isEmpty
-                ? const Center(child: Text('Your cart is empty 🛒'))
-                : Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(children: [
-                      Expanded(
-                        child: ListView(children: [
-                          for (final p in lines)
-                            ListTile(
-                              leading: Text(p.emoji, style: const TextStyle(fontSize: 28)),
-                              title: Text(p.name),
-                              subtitle: Text('₹${p.price.toInt()} × ${store.cart[p.id]}'),
-                              trailing: QtyControl(p),
-                            ),
-                        ]),
-                      ),
-                      Text('Total: ₹${store.cartTotal.toInt()}',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      TextField(
-                          controller: addr,
-                          onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(labelText: 'Delivery address', border: OutlineInputBorder())),
-                      const SizedBox(height: 4),
-                      const Text('Payment: Cash on delivery (mock)', style: TextStyle(fontSize: 12)),
-                      if (error != null) Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: addr.text.trim().isEmpty
-                              ? null
-                              : () {
-                                  final bad = store.place();
-                                  if (bad.isEmpty) {
-                                    Navigator.pushReplacement(
-                                        context, MaterialPageRoute(builder: (_) => const TrackPage()));
-                                  } else {
-                                    setState(() => error = 'Not enough stock: ${bad.join(', ')}');
-                                  }
-                                },
-                          child: const Text('Place order'),
+                ? const Center(child: Text('🛒\nYour cart is empty', textAlign: TextAlign.center, style: TextStyle(fontSize: 22)))
+                : Column(children: [
+                    Expanded(
+                      child: ListView(padding: const EdgeInsets.all(16), children: [
+                        for (final p in lines)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(12),
+                            decoration: cardBox(),
+                            child: Row(children: [
+                              Container(
+                                  width: 52,
+                                  height: 52,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(12)),
+                                  child: Text(p.emoji, style: const TextStyle(fontSize: 28))),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  Text('₹${p.price.toInt()} × ${store.cart[p.id]}', style: const TextStyle(color: Colors.black54)),
+                                ]),
+                              ),
+                              QtyControl(p),
+                            ]),
+                          ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: cardBox(),
+                          child: Column(children: [
+                            billRow('Item total', total),
+                            billRow('Delivery fee', 'FREE', color: Colors.green),
+                            const Divider(),
+                            billRow('To pay', total, bold: true),
+                          ]),
                         ),
-                      ),
-                    ]),
-                  ),
+                        const SizedBox(height: 14),
+                        TextField(
+                            controller: addr,
+                            onChanged: (_) => setState(() {}),
+                            decoration: fieldDeco('Delivery address', Icons.location_on_outlined, fill: Colors.white)),
+                        const SizedBox(height: 6),
+                        const Text('Payment: Cash on delivery (mock)', style: TextStyle(color: Colors.black54, fontSize: 12)),
+                        if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: const TextStyle(color: Colors.red))),
+                      ]),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      child: GradButton('Place order', addr.text.trim().isEmpty
+                          ? null
+                          : () {
+                              final bad = store.place();
+                              if (bad.isEmpty) {
+                                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TrackPage()));
+                              } else {
+                                setState(() => error = 'Not enough stock: ${bad.join(', ')}');
+                              }
+                            }),
+                    ),
+                  ]),
           );
         },
       );
@@ -290,27 +468,38 @@ class TrackPage extends StatelessWidget {
         listenable: store,
         builder: (context, _) {
           final o = store.order;
+          const heads = ['Order confirmed ✅', 'Packing your items 📦', 'On the way 🛵', 'Delivered 🎉'];
           return Scaffold(
-            appBar: AppBar(title: const Text('Order status')),
+            appBar: AppBar(
+                title: const Text('Order status'),
+                foregroundColor: Colors.white,
+                flexibleSpace: Container(decoration: const BoxDecoration(gradient: grad))),
             body: o == null
                 ? const Center(child: Text('No orders yet'))
-                : Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Order #${o.id} · ₹${o.total.toInt()}',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-                      for (var i = 0; i < steps.length; i++)
+                : ListView(padding: const EdgeInsets.all(20), children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(gradient: grad, borderRadius: BorderRadius.circular(20)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(heads[o.status], style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text('Order #${o.id} · ₹${o.total.toInt()}', style: const TextStyle(color: Colors.white70)),
+                      ]),
+                    ),
+                    const SizedBox(height: 24),
+                    for (var i = 0; i < steps.length; i++)
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Column(children: [
+                          Icon(i <= o.status ? Icons.check_circle : Icons.radio_button_unchecked, color: i <= o.status ? orange : Colors.grey.shade400),
+                          if (i < steps.length - 1) Container(width: 2, height: 36, color: i < o.status ? orange : Colors.grey.shade300),
+                        ]),
+                        const SizedBox(width: 14),
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Row(children: [
-                            Text(i <= o.status ? '✅' : '⚪', style: const TextStyle(fontSize: 22)),
-                            const SizedBox(width: 12),
-                            Text(steps[i], style: TextStyle(fontWeight: i == o.status ? FontWeight.bold : FontWeight.normal)),
-                          ]),
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(steps[i], style: TextStyle(fontSize: 16, fontWeight: i == o.status ? FontWeight.w800 : FontWeight.w400)),
                         ),
-                    ]),
-                  ),
+                      ]),
+                  ]),
           );
         },
       );
