@@ -41,6 +41,9 @@ class Store extends ChangeNotifier {
   Product byId(int id) => products.firstWhere((p) => p.id == id);
   int get cartCount => cart.values.fold(0, (a, b) => a + b);
   double get cartTotal => cart.entries.fold(0.0, (s, e) => s + byId(e.key).price * e.value);
+  double get handlingFee => cart.isEmpty ? 0 : 3;
+  double get deliveryFee => cart.isEmpty || cartTotal >= 99 ? 0 : 25;
+  double get payable => cartTotal + handlingFee + deliveryFee;
   List<Product> get visible => products
       .where((p) => (cat == 'All' || p.category == cat) && p.name.toLowerCase().contains(query.toLowerCase()))
       .toList();
@@ -85,7 +88,7 @@ class Store extends ChangeNotifier {
       if (p.stock < e.value) bad.add('${p.name} (${p.stock} left)');
     }
     if (cart.isEmpty || bad.isNotEmpty) return bad;
-    final total = cartTotal;
+    final total = payable;
     cart.forEach((id, q) => byId(id).stock -= q);
     order = Order((order?.id ?? 0) + 1, total, 0);
     cart = {};
@@ -227,80 +230,158 @@ class LoginPage extends StatelessWidget {
       );
 }
 
+Widget sectionTitle(String t) =>
+    Padding(padding: const EdgeInsets.fromLTRB(16, 18, 16, 8), child: Text(t, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)));
+
+Widget banner(String text, Color a, Color b) => Container(
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.all(20),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(gradient: LinearGradient(colors: [a, b]), borderRadius: BorderRadius.circular(20)),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+    );
+
+// Own State so the carousel keeps its page when the cart changes.
+class Banners extends StatefulWidget {
+  const Banners({super.key});
+  @override
+  State<Banners> createState() => _BannersState();
+}
+
+class _BannersState extends State<Banners> {
+  final c = PageController(viewportFraction: .92);
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 130,
+        child: PageView(controller: c, children: [
+          banner('Fresh fruits\nat your door 🍎', const Color(0xFF43A047), const Color(0xFF9CCC65)),
+          banner('Dairy essentials\nin 10 minutes 🥛', const Color(0xFF1E88E5), const Color(0xFF64B5F6)),
+          banner('Snack time! 🍪\nCrunchy picks', const Color(0xFF8E24AA), const Color(0xFFBA68C8)),
+        ]),
+      );
+}
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
+
+  Widget _grid(List<Product> ps, {bool inList = false}) => GridView.builder(
+        shrinkWrap: inList,
+        physics: inList ? const NeverScrollableScrollPhysics() : null,
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 90),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, mainAxisExtent: 215),
+        itemCount: ps.length,
+        itemBuilder: (_, i) => ProductCard(ps[i]),
+      );
+
+  Widget _home() {
+    final best = (store.products.where((p) => p.stock > 0).toList()..sort((a, b) => b.stock.compareTo(a.stock))).take(6).toList();
+    return ListView(padding: EdgeInsets.zero, children: [
+      const SizedBox(height: 12),
+      const Banners(),
+      sectionTitle('Shop by category'),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(children: [
+          for (final c in categories.skip(1))
+            Expanded(
+              child: GestureDetector(
+                onTap: () => store.setCat(c),
+                child: Column(children: [
+                  Container(
+                      height: 64,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(18)),
+                      child: Text(catEmoji[c]!, style: const TextStyle(fontSize: 30))),
+                  const SizedBox(height: 6),
+                  Text(c, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+        ]),
+      ),
+      sectionTitle('Bestsellers'),
+      SizedBox(
+        height: 215,
+        child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 14), children: [
+          for (final p in best) Container(width: 165, margin: const EdgeInsets.only(right: 12), child: ProductCard(p)),
+        ]),
+      ),
+      sectionTitle('All products'),
+      _grid(store.products, inList: true),
+    ]);
+  }
+
+  Widget _browse(List<Product> ps) => Column(children: [
+        SizedBox(
+          height: 56,
+          child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), children: [
+            for (final c in categories)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text('${catEmoji[c]} $c'),
+                  selected: store.cat == c,
+                  showCheckmark: false,
+                  selectedColor: orange,
+                  backgroundColor: Colors.white,
+                  side: BorderSide.none,
+                  labelStyle: TextStyle(fontWeight: FontWeight.w600, color: store.cat == c ? Colors.white : Colors.black87),
+                  onSelected: (_) => store.setCat(c),
+                ),
+              ),
+          ]),
+        ),
+        Expanded(child: ps.isEmpty ? const Center(child: Text('No products found')) : _grid(ps)),
+      ]);
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: store,
         builder: (context, _) {
-          final ps = store.visible;
+          final browsing = store.cat != 'All' || store.query.isNotEmpty;
           return Scaffold(
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: 0,
+              onDestinationSelected: (i) {
+                if (i == 1) go(context, const TrackPage());
+                if (i == 2) go(context, const CartPage());
+              },
+              destinations: [
+                const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+                const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
+                NavigationDestination(
+                    icon: Badge(isLabelVisible: store.cartCount > 0, label: Text('${store.cartCount}'), child: const Icon(Icons.shopping_bag_outlined)),
+                    label: 'Cart'),
+              ],
+            ),
             body: Stack(children: [
               Column(children: [
                 Container(
-                  padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 8, 16),
+                  padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 16),
                   decoration: const BoxDecoration(gradient: grad, borderRadius: BorderRadius.vertical(bottom: Radius.circular(28))),
                   child: Column(children: [
                     Row(children: [
                       const Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('Delivery in 10 minutes ⚡', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-                          Text('Deliver to Home', style: TextStyle(color: Colors.white70)),
+                          Text('Deliver to Home ▾', style: TextStyle(color: Colors.white70)),
                         ]),
                       ),
-                      if (store.order != null)
-                        IconButton(icon: const Icon(Icons.local_shipping_outlined, color: Colors.white), onPressed: () => go(context, const TrackPage())),
-                      IconButton(
-                        icon: Badge(
-                            isLabelVisible: store.cartCount > 0,
-                            label: Text('${store.cartCount}'),
-                            child: const Icon(Icons.shopping_bag_outlined, color: Colors.white)),
-                        onPressed: () => go(context, const CartPage()),
-                      ),
+                      const CircleAvatar(backgroundColor: Colors.white24, child: Icon(Icons.person_outline, color: Colors.white)),
                     ]),
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: TextField(onChanged: store.setQuery, decoration: fieldDeco('Search "milk"', Icons.search, fill: Colors.white)),
-                    ),
+                    const SizedBox(height: 12),
+                    TextField(onChanged: store.setQuery, decoration: fieldDeco('Search "milk"', Icons.search, fill: Colors.white)),
                   ]),
                 ),
-                SizedBox(
-                  height: 60,
-                  child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), children: [
-                    for (final c in categories)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text('${catEmoji[c]} $c'),
-                          selected: store.cat == c,
-                          showCheckmark: false,
-                          selectedColor: orange,
-                          backgroundColor: Colors.white,
-                          side: BorderSide.none,
-                          labelStyle: TextStyle(fontWeight: FontWeight.w600, color: store.cat == c ? Colors.white : Colors.black87),
-                          onSelected: (_) => store.setCat(c),
-                        ),
-                      ),
-                  ]),
-                ),
-                Expanded(
-                  child: ps.isEmpty
-                      ? const Center(child: Text('No products found'))
-                      : GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(14, 4, 14, 90),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, mainAxisExtent: 215),
-                          itemCount: ps.length,
-                          itemBuilder: (_, i) => ProductCard(ps[i]),
-                        ),
-                ),
+                Expanded(child: browsing ? _browse(store.visible) : _home()),
               ]),
               if (store.cartCount > 0)
                 Positioned(
                   left: 16,
                   right: 16,
-                  bottom: 16,
+                  bottom: 12,
                   child: GradButton('${store.cartCount} items · ₹${store.cartTotal.toInt()}      View cart  →', () => go(context, const CartPage())),
                 ),
             ]),
@@ -426,10 +507,17 @@ class _CartPageState extends State<CartPage> {
                           padding: const EdgeInsets.all(16),
                           decoration: cardBox(),
                           child: Column(children: [
+                            if (store.deliveryFee > 0)
+                              Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text('Add ₹${(99 - store.cartTotal).toInt()} more for free delivery 🛵',
+                                      style: const TextStyle(color: orange, fontWeight: FontWeight.w600))),
                             billRow('Item total', total),
-                            billRow('Delivery fee', 'FREE', color: Colors.green),
+                            billRow('Delivery fee', store.deliveryFee == 0 ? 'FREE' : '₹${store.deliveryFee.toInt()}',
+                                color: store.deliveryFee == 0 ? Colors.green : null),
+                            billRow('Handling fee', '₹${store.handlingFee.toInt()}'),
                             const Divider(),
-                            billRow('To pay', total, bold: true),
+                            billRow('To pay', '₹${store.payable.toInt()}', bold: true),
                           ]),
                         ),
                         const SizedBox(height: 14),
